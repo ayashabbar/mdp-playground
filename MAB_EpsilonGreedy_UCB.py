@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import trange
 
-matplotlib.use('Agg')
+matplotlib.use("Agg")
 
 
 class Bandit:
@@ -14,8 +14,16 @@ class Bandit:
     # @sample_averages: if True, use sample averages to update estimations instead of constant step size
     # @UCB_param: if not None, use UCB algorithm to select action
 
-    def __init__(self, k_arm=10, epsilon=0., initial=0., step_size=0.1, sample_averages=False, UCB_param=None,
-                true_reward=0.):
+    def __init__(
+        self,
+        k_arm=10,
+        epsilon=0.0,
+        initial=0.0,
+        step_size=0.1,
+        sample_averages=False,
+        UCB_param=None,
+        true_reward=0.0,
+    ):
         self.k = k_arm
         self.step_size = step_size
         self.sample_averages = sample_averages
@@ -47,11 +55,12 @@ class Bandit:
             return np.random.choice(self.indices)
 
         if self.UCB_param is not None:
-            UCB_estimation = self.q_estimation + \
-            self.UCB_param * np.sqrt(np.log(self.time + 1) / (self.action_count + 1e-5))
+            UCB_estimation = self.q_estimation + self.UCB_param * np.sqrt(
+                np.log(self.time + 1) / (self.action_count + 1e-5)
+            )
             q_best = np.max(UCB_estimation)
             return np.random.choice(np.where(UCB_estimation == q_best)[0])
-        
+
         q_best = np.max(self.q_estimation)
         return np.random.choice(np.where(self.q_estimation == q_best)[0])
 
@@ -65,10 +74,14 @@ class Bandit:
 
         if self.sample_averages:
             # update estimation using sample averages
-            self.q_estimation[action] += (reward - self.q_estimation[action]) / self.action_count[action]
+            self.q_estimation[action] += (
+                reward - self.q_estimation[action]
+            ) / self.action_count[action]
         else:
             # update estimation with constant step size
-            self.q_estimation[action] += self.step_size * (reward - self.q_estimation[action])
+            self.q_estimation[action] += self.step_size * (
+                reward - self.q_estimation[action]
+            )
         return reward
 
 
@@ -98,21 +111,20 @@ def figure_epsilongreedy(runs=2000, time=1000):
 
     plt.subplot(2, 1, 1)
     for eps, rewards in zip(epsilons, rewards):
-        plt.plot(rewards, label=r'$\epsilon = %.02f$' % (eps))
-    plt.xlabel('steps')
-    plt.ylabel('average reward')
+        plt.plot(rewards, label=r"$\epsilon = %.02f$" % (eps))
+    plt.xlabel("steps")
+    plt.ylabel("average reward")
     plt.legend()
 
     plt.subplot(2, 1, 2)
     for eps, counts in zip(epsilons, best_action_counts):
-        plt.plot(counts, label=r'$\epsilon = %.02f$' % (eps))
-    plt.xlabel('steps')
-    plt.ylabel('optimal action')
+        plt.plot(counts, label=r"$\epsilon = %.02f$" % (eps))
+    plt.xlabel("steps")
+    plt.ylabel("optimal action")
     plt.legend()
 
-    plt.savefig('C:/Users/ashabbar/Documents/AGPD/Code/figure_epsilongreedy.png')
+    plt.savefig("figure_epsilongreedy.png")
     plt.close()
-
 
 
 def figure_UCB(runs=2000, time=1000):
@@ -121,15 +133,16 @@ def figure_UCB(runs=2000, time=1000):
     bandits.append(Bandit(epsilon=0.1, sample_averages=True))
     _, average_rewards = simulate(runs, time, bandits)
 
-    plt.plot(average_rewards[0], label='UCB $c = 2$')
-    plt.plot(average_rewards[1], label='epsilon greedy $\\epsilon = 0.1$')
-    plt.xlabel('Steps')
-    plt.ylabel('Average reward')
+    plt.plot(average_rewards[0], label="UCB $c = 2$")
+    plt.plot(average_rewards[1], label="epsilon greedy $\\epsilon = 0.1$")
+    plt.xlabel("Steps")
+    plt.ylabel("Average reward")
     plt.legend()
 
-    plt.savefig('C:/Users/ashabbar/Documents/AGPD/Code/figure_UCB.png')
+    plt.savefig("figure_UCB.png")
     plt.close()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     figure_epsilongreedy()
     figure_UCB()
