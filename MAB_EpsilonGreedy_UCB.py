@@ -3,9 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import trange
 
-matplotlib.use("Agg")
-
-
 class Bandit:
     # @k_arm: # of arms
     # @epsilon: probability for exploration in epsilon-greedy algorithm
@@ -102,7 +99,7 @@ def simulate(runs, time, bandits):
     return mean_best_action_counts, mean_rewards
 
 
-def figure_epsilongreedy(runs=2000, time=1000):
+def figure_epsilongreedy(runs=2000, time=1000, show=False):
     epsilons = [0, 0.1, 0.01]
     bandits = [Bandit(epsilon=eps, sample_averages=True) for eps in epsilons]
     best_action_counts, rewards = simulate(runs, time, bandits)
@@ -122,12 +119,14 @@ def figure_epsilongreedy(runs=2000, time=1000):
     plt.xlabel("steps")
     plt.ylabel("optimal action")
     plt.legend()
-
-    plt.savefig("figure_epsilongreedy.png")
+    if show:
+        plt.show()
+    else:
+        plt.savefig("figure_epsilongreedy.png")
     plt.close()
 
 
-def figure_UCB(runs=2000, time=1000):
+def figure_UCB(runs=2000, time=1000, show=False):
     bandits = []
     bandits.append(Bandit(epsilon=0, UCB_param=2, sample_averages=True))
     bandits.append(Bandit(epsilon=0.1, sample_averages=True))
@@ -138,8 +137,10 @@ def figure_UCB(runs=2000, time=1000):
     plt.xlabel("Steps")
     plt.ylabel("Average reward")
     plt.legend()
-
-    plt.savefig("figure_UCB.png")
+    if show:
+        plt.show()
+    else:
+        plt.savefig("figure_UCB.png")
     plt.close()
 
 
