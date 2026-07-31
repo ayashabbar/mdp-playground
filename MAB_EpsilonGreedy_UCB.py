@@ -3,7 +3,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import trange
 
-class Bandit:
+from abc import ABC, abstractmethod
+
+class Base_Bandit(ABC):
     # @k_arm: # of arms
     # @epsilon: probability for exploration in epsilon-greedy algorithm
     # @initial: initial estimation for each action
@@ -47,19 +49,9 @@ class Bandit:
         self.time = 0
 
     # get an action for this bandit
+    @abstractmethod
     def act(self):
-        if np.random.rand() < self.epsilon:
-            return np.random.choice(self.indices)
-
-        if self.UCB_param is not None:
-            UCB_estimation = self.q_estimation + self.UCB_param * np.sqrt(
-                np.log(self.time + 1) / (self.action_count + 1e-5)
-            )
-            q_best = np.max(UCB_estimation)
-            return np.random.choice(np.where(UCB_estimation == q_best)[0])
-
-        q_best = np.max(self.q_estimation)
-        return np.random.choice(np.where(self.q_estimation == q_best)[0])
+        pass
 
     # take an action, update estimation for this action
     def step(self, action):
@@ -81,6 +73,24 @@ class Bandit:
             )
         return reward
 
+class EpsilonGreedy(Base_Bandit): 
+    def act(self):
+        if np.random.rand() < self.epsilon:
+            return np.random.choice(self.indices) 
+        q_best = np.max(self.q_estimation)
+        return np.random.choice(np.where(self.q_estimation == q_best)[0])   
+    
+    
+class UCB(Base_Bandit):
+    def act(self):
+        if self.UCB_param is not None:
+            UCB_estimation = self.q_estimation + \
+            self.UCB_param * np.sqrt(np.log(self.time + 1) / (self.action_count + 1e-5))
+            q_best = np.max(UCB_estimation)
+            return np.random.choice(np.where(UCB_estimation == q_best)[0])
+        q_best = np.max(self.q_estimation)
+        return np.random.choice(np.where(self.q_estimation == q_best)[0])    
+
 
 def simulate(runs, time, bandits):
     rewards = np.zeros((len(bandits), runs, time))
@@ -101,7 +111,7 @@ def simulate(runs, time, bandits):
 
 def figure_epsilongreedy(runs=2000, time=1000, show=False):
     epsilons = [0, 0.1, 0.01]
-    bandits = [Bandit(epsilon=eps, sample_averages=True) for eps in epsilons]
+    bandits = [EpsilonGreedy(epsilon=eps, sample_averages=True) for eps in epsilons]
     best_action_counts, rewards = simulate(runs, time, bandits)
 
     plt.figure(figsize=(10, 20))
@@ -128,8 +138,8 @@ def figure_epsilongreedy(runs=2000, time=1000, show=False):
 
 def figure_UCB(runs=2000, time=1000, show=False):
     bandits = []
-    bandits.append(Bandit(epsilon=0, UCB_param=2, sample_averages=True))
-    bandits.append(Bandit(epsilon=0.1, sample_averages=True))
+    bandits.append(UCB(epsilon=0, UCB_param=2, sample_averages=True))
+    bandits.append(UCB(epsilon=0.1, sample_averages=True))
     _, average_rewards = simulate(runs, time, bandits)
 
     plt.plot(average_rewards[0], label="UCB $c = 2$")
