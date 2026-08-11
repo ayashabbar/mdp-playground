@@ -2,6 +2,9 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import trange
+import random
+from numpy.random import beta, binomial
+from scipy.stats import beta
 
 from abc import ABC, abstractmethod
 
@@ -48,6 +51,7 @@ class Base_Bandit(ABC):
 
         self.time = 0
 
+
     # get an action for this bandit
     @abstractmethod
     def act(self):
@@ -71,6 +75,7 @@ class Base_Bandit(ABC):
             self.q_estimation[action] += self.step_size * (
                 reward - self.q_estimation[action]
             )
+
         return reward
 
 class EpsilonGreedy(Base_Bandit): 
@@ -92,6 +97,98 @@ class UCB(Base_Bandit):
         return np.random.choice(np.where(self.q_estimation == q_best)[0])    
 
 
+class ThompsonSampling(Base_Bandit):
+    def __init__(self, alphas=None, betas=None, successes=None, failures=None):
+        self.k_arm = 0
+        # default to uniform priors (1, 1) if not provided
+        self.default_alpha = 1
+        self.default_beta = 1
+            
+        # will be initialized in initialize() or reset()
+        self.alphas = alphas
+        self.betas = betas
+        self.successes = successes
+        self.failures = failures
+        self.best_action = None
+        self.true_probs = None
+
+    def initialize(self, k_arm, true_probs=None):
+        self.k_arm = k_arm
+        self.true_probs = true_probs
+        if true_probs:
+            self.best_action = int(np.argmax(true_probs))
+                
+        # reset to uniform priors
+        self.alphas = [self.default_alpha] * k_arm
+        self.betas = [self.default_beta] * k_arm
+        self.successes = [0] * k_arm
+        self.failures = [0] * k_arm
+
+    def reset(self):
+        # resets the internal state for a new run
+        if self.k_arm > 0:
+            self.alphas = [self.default_alpha] * self.k_arm
+            self.betas = [self.default_beta] * self.k_arm
+            self.successes = [0] * self.k_arm
+            self.failures = [0] * self.k_arm
+
+    def act(self) -> int:
+        samples = [np.random.beta(a, b) for a, b in zip(self.alphas, self.betas)]
+        return int(np.argmax(samples))
+
+    def step(self, action: int) -> float:
+        """
+        Simulates the environment: generates a reward based on true probabilities,
+        updates the internal counts, and returns the reward.
+        """
+        if self.true_probs is None:
+            raise ValueError("true_probs must be set via initialize() before calling step()")
+                
+        # generate reward (Bernoulli trial)
+        reward = 1 if random.random() < self.true_probs[action] else 0
+            
+        # update internal statistics
+        if reward == 1:
+            self.successes[action] += 1
+            self.alphas[action] += 1
+        else:
+            self.failures[action] += 1
+            self.betas[action] += 1
+                
+        return reward
+
+    def update(self, arm, reward):
+        pass
+
+    def plot_posteriors(self, arm_labels=None):
+        # plots the Probability Density Function (PDF) of the Beta distribution for each arm."""
+        n_arms = len(self.alphas)
+        if arm_labels is None:
+            arm_labels = [f"Arm {i+1}" for i in range(n_arms)]
+            
+        x = np.linspace(0, 1, 1000)
+        plt.figure(figsize=(10, 6))
+        
+        for i in range(n_arms):
+            # calculate shape parameters: prior + observed
+            a = self.alphas[i] # equivalent to successes + prior_alpha
+            b = self.betas[i]  # equivalent to failures + prior_beta
+            
+            pdf = beta.pdf(x, a, b)
+            
+            label = f"{arm_labels[i]} ($\\alpha$={a}, $\\beta$={b})"
+            if i == self.best_action:
+                plt.plot(x, pdf, label=label, linewidth=2.5, linestyle='--')
+            else:
+                plt.plot(x, pdf, label=label)
+
+        plt.xlabel("Probability of Success ($\\theta$)")
+        plt.ylabel("Probability Density")
+        plt.title("Posterior Beta Distributions for Each Arm")
+        plt.legend()
+        #plt.show()      
+
+
 def simulate(runs, time, bandits):
     rewards = np.zeros((len(bandits), runs, time))
     best_action_counts = np.zeros(rewards.shape)
@@ -103,7 +200,8 @@ def simulate(runs, time, bandits):
                 reward = bandit.step(action)
                 rewards[i, r, t] = reward
                 if action == bandit.best_action:
-                    best_action_counts[i, r, t] = 1
+                    best_action_counts[i, r, t] = 1 
+
     mean_best_action_counts = best_action_counts.mean(axis=1)
     mean_rewards = rewards.mean(axis=1)
     return mean_best_action_counts, mean_rewards
@@ -154,6 +252,55 @@ def figure_UCB(runs=2000, time=1000, show=False):
     plt.close()
 
 
+def figure_TS(runs=2000, time=1000, show=False):
+    true_probs = [0.2, 0.7, 0.5]
+    k_arms = len(true_probs)
+
+    ts = ThompsonSampling()
+    ts.initialize(k_arm=k_arms, true_probs=true_probs)
+    bandits_list = [ts]
+    
+    rewards, optimality = simulate(runs, time, bandits=bandits_list)
+    avg_rewards = rewards[0]
+    avg_optimality = optimality[0]
+
+    plt.figure(figsize=(12, 5))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(avg_rewards)
+    plt.title("Average Reward per Step")
+    plt.xlabel("Step")
+    plt.ylabel("Reward")
+
+    plt.subplot(1, 2, 2)
+    plt.plot(avg_optimality * 100)
+    plt.title("Percentage of Optimal Actions")
+    plt.xlabel("Step")
+    plt.ylabel("% Optimal")
+    plt.ylim(0, 100)
+    plt.tight_layout()
+    if show:
+        plt.show()
+    else:
+        plt.savefig("figure_TS.png")
+    plt.close()
+
+
+    # visualize final posteriors
+    ts_viz = ThompsonSampling()
+    ts_viz.initialize(k_arm=k_arms, true_probs=true_probs)
+
+    for _ in range(200):
+        action = ts_viz.act()
+        reward = ts_viz.step(action)
+
+    ts_viz.plot_posteriors(arm_labels=["Low (0.2)", "High (0.7)", "Med (0.5)"])
+    plt.savefig("figure_TS_PDF.png")
+    plt.close()
+
+
+ 
 if __name__ == "__main__":
     figure_epsilongreedy()
     figure_UCB()
+    figure_TS()
