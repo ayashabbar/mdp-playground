@@ -1,12 +1,11 @@
-import matplotlib
+import random
+from abc import ABC, abstractmethod
+
 import matplotlib.pyplot as plt
 import numpy as np
-from tqdm import trange
-import random
-from numpy.random import beta, binomial
 from scipy.stats import beta
+from tqdm import trange
 
-from abc import ABC, abstractmethod
 
 class Base_Bandit(ABC):
     # @k_arm: # of arms
@@ -51,7 +50,6 @@ class Base_Bandit(ABC):
 
         self.time = 0
 
-
     # get an action for this bandit
     @abstractmethod
     def act(self):
@@ -78,23 +76,25 @@ class Base_Bandit(ABC):
 
         return reward
 
-class EpsilonGreedy(Base_Bandit): 
+
+class EpsilonGreedy(Base_Bandit):
     def act(self):
         if np.random.rand() < self.epsilon:
-            return np.random.choice(self.indices) 
+            return np.random.choice(self.indices)
         q_best = np.max(self.q_estimation)
-        return np.random.choice(np.where(self.q_estimation == q_best)[0])   
-    
-    
+        return np.random.choice(np.where(self.q_estimation == q_best)[0])
+
+
 class UCB(Base_Bandit):
     def act(self):
         if self.UCB_param is not None:
-            UCB_estimation = self.q_estimation + \
-            self.UCB_param * np.sqrt(np.log(self.time + 1) / (self.action_count + 1e-5))
+            UCB_estimation = self.q_estimation + self.UCB_param * np.sqrt(
+                np.log(self.time + 1) / (self.action_count + 1e-5)
+            )
             q_best = np.max(UCB_estimation)
             return np.random.choice(np.where(UCB_estimation == q_best)[0])
         q_best = np.max(self.q_estimation)
-        return np.random.choice(np.where(self.q_estimation == q_best)[0])    
+        return np.random.choice(np.where(self.q_estimation == q_best)[0])
 
 
 class ThompsonSampling(Base_Bandit):
@@ -103,7 +103,7 @@ class ThompsonSampling(Base_Bandit):
         # default to uniform priors (1, 1) if not provided
         self.default_alpha = 1
         self.default_beta = 1
-            
+
         # will be initialized in initialize() or reset()
         self.alphas = alphas
         self.betas = betas
@@ -117,7 +117,7 @@ class ThompsonSampling(Base_Bandit):
         self.true_probs = true_probs
         if true_probs:
             self.best_action = int(np.argmax(true_probs))
-                
+
         # reset to uniform priors
         self.alphas = [self.default_alpha] * k_arm
         self.betas = [self.default_beta] * k_arm
@@ -142,11 +142,13 @@ class ThompsonSampling(Base_Bandit):
         updates the internal counts, and returns the reward.
         """
         if self.true_probs is None:
-            raise ValueError("true_probs must be set via initialize() before calling step()")
-                
+            raise ValueError(
+                "true_probs must be set via initialize() before calling step()"
+            )
+
         # generate reward (Bernoulli trial)
         reward = 1 if random.random() < self.true_probs[action] else 0
-            
+
         # update internal statistics
         if reward == 1:
             self.successes[action] += 1
@@ -154,7 +156,7 @@ class ThompsonSampling(Base_Bandit):
         else:
             self.failures[action] += 1
             self.betas[action] += 1
-                
+
         return reward
 
     def update(self, arm, reward):
@@ -164,21 +166,21 @@ class ThompsonSampling(Base_Bandit):
         # plots the Probability Density Function (PDF) of the Beta distribution for each arm."""
         n_arms = len(self.alphas)
         if arm_labels is None:
-            arm_labels = [f"Arm {i+1}" for i in range(n_arms)]
-            
+            arm_labels = [f"Arm {i + 1}" for i in range(n_arms)]
+
         x = np.linspace(0, 1, 1000)
         plt.figure(figsize=(10, 6))
-        
+
         for i in range(n_arms):
             # calculate shape parameters: prior + observed
-            a = self.alphas[i] # equivalent to successes + prior_alpha
+            a = self.alphas[i]  # equivalent to successes + prior_alpha
             b = self.betas[i]  # equivalent to failures + prior_beta
-            
+
             pdf = beta.pdf(x, a, b)
-            
+
             label = f"{arm_labels[i]} ($\\alpha$={a}, $\\beta$={b})"
             if i == self.best_action:
-                plt.plot(x, pdf, label=label, linewidth=2.5, linestyle='--')
+                plt.plot(x, pdf, label=label, linewidth=2.5, linestyle="--")
             else:
                 plt.plot(x, pdf, label=label)
 
@@ -186,7 +188,7 @@ class ThompsonSampling(Base_Bandit):
         plt.ylabel("Probability Density")
         plt.title("Posterior Beta Distributions for Each Arm")
         plt.legend()
-        #plt.show()      
+        # plt.show()
 
 
 def simulate(runs, time, bandits):
@@ -200,7 +202,7 @@ def simulate(runs, time, bandits):
                 reward = bandit.step(action)
                 rewards[i, r, t] = reward
                 if action == bandit.best_action:
-                    best_action_counts[i, r, t] = 1 
+                    best_action_counts[i, r, t] = 1
 
     mean_best_action_counts = best_action_counts.mean(axis=1)
     mean_rewards = rewards.mean(axis=1)
@@ -259,7 +261,7 @@ def figure_TS(runs=2000, time=1000, show=False):
     ts = ThompsonSampling()
     ts.initialize(k_arm=k_arms, true_probs=true_probs)
     bandits_list = [ts]
-    
+
     rewards, optimality = simulate(runs, time, bandits=bandits_list)
     avg_rewards = rewards[0]
     avg_optimality = optimality[0]
@@ -285,7 +287,6 @@ def figure_TS(runs=2000, time=1000, show=False):
         plt.savefig("figure_TS.png")
     plt.close()
 
-
     # visualize final posteriors
     ts_viz = ThompsonSampling()
     ts_viz.initialize(k_arm=k_arms, true_probs=true_probs)
@@ -299,7 +300,6 @@ def figure_TS(runs=2000, time=1000, show=False):
     plt.close()
 
 
- 
 if __name__ == "__main__":
     figure_epsilongreedy()
     figure_UCB()
