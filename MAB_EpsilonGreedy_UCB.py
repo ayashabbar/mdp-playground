@@ -1,10 +1,15 @@
-import random
 from abc import ABC, abstractmethod
 
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import beta
 from tqdm import trange
+
+from environment import (
+    BanditEnvironment,
+    BernoulliBanditEnvironment,
+    GaussianBanditEnvironment,
+)
 
 
 class Base_Bandit(ABC):
@@ -17,36 +22,34 @@ class Base_Bandit(ABC):
 
     def __init__(
         self,
-        k_arm=10,
+        env: BanditEnvironment,
         epsilon=0.0,
         initial=0.0,
         step_size=0.1,
         sample_averages=False,
-        true_reward=0.0,
     ):
-        self.k = k_arm
+        self.env = env
+        self.k = env.num_actions
         self.step_size = step_size
         self.sample_averages = sample_averages
         self.indices = np.arange(self.k)
-        self.time = 0
-        self.average_reward = 0
-        self.true_reward = true_reward
         self.epsilon = epsilon
         self.initial = initial
 
-    def reset(self):
-        # real reward for each action
-        self.q_true = np.random.randn(self.k) + self.true_reward
-
+        self.average_reward = 0
+        self.time = 0
         # estimation for each action
         self.q_estimation = np.zeros(self.k) + self.initial
-
         # # of chosen times for each action
         self.action_count = np.zeros(self.k)
 
-        self.best_action = np.argmax(self.q_true)
-
+    def reset(self):
+        # estimation for each action
+        self.q_estimation = np.zeros(self.k) + self.initial
+        # # of chosen times for each action
+        self.action_count = np.zeros(self.k)
         self.time = 0
+        self.average_reward = 0
 
     # get an action for this bandit
     @abstractmethod
@@ -56,7 +59,7 @@ class Base_Bandit(ABC):
     # take an action, update estimation for this action
     def step(self, action):
         # generate the reward under N(real reward, 1)
-        reward = np.random.randn() + self.q_true[action]
+        reward = self.env.get_reward(action)
         self.time += 1
         self.action_count[action] += 1
         self.average_reward += (reward - self.average_reward) / self.time
@@ -100,34 +103,31 @@ class UCB(Base_Bandit):
 
 
 class ThompsonSampling(Base_Bandit):
-    def __init__(self, true_probs=None, default_alpha=1, default_beta=1, **kwargs):
+    def __init__(
+        self, env: BanditEnvironment, default_alpha=1, default_beta=1, **kwargs
+    ):
+        if not isinstance(env, BernoulliBanditEnvironment):
+            raise TypeError(
+                "ThompsonSampling requires a BernoulliBanditEnvironment instance."
+            )
         # Thompson Sampling specific parameters
         self.default_alpha = default_alpha
         self.default_beta = default_beta
-        self.true_probs = true_probs
 
         # Call the superclass constructor with all remaining parameters
-        super().__init__(**kwargs)
+        super().__init__(env=env, **kwargs)
 
         # Initialize Thompson Sampling specific attributes using k from superclass
-        if self.k > 0:
-            self.alphas = [self.default_alpha] * self.k
-            self.betas = [self.default_beta] * self.k
-            self.successes = [0] * self.k
-            self.failures = [0] * self.k
-
-            if self.true_probs:
-                self.best_action = int(np.argmax(self.true_probs))
-            else:
-                self.best_action = None
+        self.alphas = [self.default_alpha] * self.k
+        self.betas = [self.default_beta] * self.k
+        self.successes = [0] * self.k
+        self.failures = [0] * self.k
 
     def reset(self):
-        # resets the internal state for a new run
-        if self.k > 0:
-            self.alphas = [self.default_alpha] * self.k
-            self.betas = [self.default_beta] * self.k
-            self.successes = [0] * self.k
-            self.failures = [0] * self.k
+        self.alphas = [self.default_alpha] * self.k
+        self.betas = [self.default_beta] * self.k
+        self.successes = [0] * self.k
+        self.failures = [0] * self.k
 
     def act(self) -> int:
         samples = [np.random.beta(a, b) for a, b in zip(self.alphas, self.betas)]
@@ -138,13 +138,9 @@ class ThompsonSampling(Base_Bandit):
         Simulates the environment: generates a reward based on true probabilities,
         updates the internal counts, and returns the reward.
         """
-        if self.true_probs is None:
-            raise ValueError(
-                "true_probs must be set via initialize() before calling step()"
-            )
-
-        # generate reward (Bernoulli trial)
-        reward = 1 if random.random() < self.true_probs[action] else 0
+        reward = self.env.get_reward(action)
+        self.time += 1
+        self.average_reward += (reward - self.average_reward) / self.time
 
         # update internal statistics
         if reward == 1:
@@ -176,7 +172,7 @@ class ThompsonSampling(Base_Bandit):
             pdf = beta.pdf(x, a, b)
 
             label = f"{arm_labels[i]} ($\\alpha$={a}, $\\beta$={b})"
-            if i == self.best_action:
+            if i == self.env.best_action:
                 plt.plot(x, pdf, label=label, linewidth=2.5, linestyle="--")
             else:
                 plt.plot(x, pdf, label=label)
@@ -193,12 +189,13 @@ def simulate(runs, time, bandits):
     best_action_counts = np.zeros(rewards.shape)
     for i, bandit in enumerate(bandits):
         for r in trange(runs):
+            bandit.env.reset()
             bandit.reset()
             for t in range(time):
                 action = bandit.act()
                 reward = bandit.step(action)
                 rewards[i, r, t] = reward
-                if action == bandit.best_action:
+                if action == bandit.env.best_action:
                     best_action_counts[i, r, t] = 1
 
     mean_best_action_counts = best_action_counts.mean(axis=1)
@@ -207,8 +204,11 @@ def simulate(runs, time, bandits):
 
 
 def figure_epsilongreedy(runs=2000, time=1000, show=False):
+    env = GaussianBanditEnvironment(num_actions=10)
     epsilons = [0, 0.1, 0.01]
-    bandits = [EpsilonGreedy(epsilon=eps, sample_averages=True) for eps in epsilons]
+    bandits = [
+        EpsilonGreedy(env=env, epsilon=eps, sample_averages=True) for eps in epsilons
+    ]
     best_action_counts, rewards = simulate(runs, time, bandits)
 
     plt.figure(figsize=(10, 20))
@@ -234,9 +234,11 @@ def figure_epsilongreedy(runs=2000, time=1000, show=False):
 
 
 def figure_UCB(runs=2000, time=1000, show=False):
+    env = GaussianBanditEnvironment(num_actions=10)
     bandits = []
-    bandits.append(UCB(epsilon=0, UCB_param=2, sample_averages=True))
-    bandits.append(UCB(epsilon=0.1, sample_averages=True))
+    bandits.append(UCB(env=env, epsilon=0, UCB_param=2, sample_averages=True))
+    # Shouldn't this be an EpsilonGreedy agent?
+    bandits.append(UCB(env=env, epsilon=0.1, sample_averages=True))
     _, average_rewards = simulate(runs, time, bandits)
 
     plt.plot(average_rewards[0], label="UCB $c = 2$")
@@ -253,9 +255,9 @@ def figure_UCB(runs=2000, time=1000, show=False):
 
 def figure_TS(runs=2000, time=1000, show=False):
     true_probs = [0.2, 0.7, 0.5]
-    k_arms = len(true_probs)
+    env = BernoulliBanditEnvironment(true_probs=true_probs)
 
-    ts = ThompsonSampling(k_arm=k_arms, true_probs=true_probs)
+    ts = ThompsonSampling(env=env)
     bandits_list = [ts]
 
     rewards, optimality = simulate(runs, time, bandits=bandits_list)
@@ -284,7 +286,7 @@ def figure_TS(runs=2000, time=1000, show=False):
     plt.close()
 
     # visualize final posteriors
-    ts_viz = ThompsonSampling(k_arm=k_arms, true_probs=true_probs)
+    ts_viz = ThompsonSampling(env=env)
 
     for _ in range(200):
         action = ts_viz.act()
