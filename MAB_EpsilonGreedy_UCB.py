@@ -87,19 +87,16 @@ class EpsilonGreedy(Base_Bandit):
 
 
 class UCB(Base_Bandit):
-    def __init__(self, UCB_param=None, **kwargs):
+    def __init__(self, UCB_param=2, **kwargs):
         super().__init__(**kwargs)
         self.UCB_param = UCB_param
 
     def act(self) -> int:
-        if self.UCB_param is not None:
-            UCB_estimation = self.q_estimation + self.UCB_param * np.sqrt(
-                np.log(self.time + 1) / (self.action_count + 1e-5)
-            )
-            q_best = np.max(UCB_estimation)
-            return np.random.choice(np.where(UCB_estimation == q_best)[0])
-        q_best = np.max(self.q_estimation)
-        return np.random.choice(np.where(self.q_estimation == q_best)[0])
+        UCB_estimation = self.q_estimation + self.UCB_param * np.sqrt(
+            np.log(self.time + 1) / (self.action_count + 1e-5)
+        )
+        q_best = np.max(UCB_estimation)
+        return np.random.choice(np.where(UCB_estimation == q_best)[0])
 
 
 class ThompsonSampling(Base_Bandit):
@@ -236,9 +233,8 @@ def figure_epsilongreedy(runs=2000, time=1000, show=False):
 def figure_UCB(runs=2000, time=1000, show=False):
     env = GaussianBanditEnvironment(num_actions=10)
     bandits = []
-    bandits.append(UCB(env=env, epsilon=0, UCB_param=2, sample_averages=True))
-    # Shouldn't this be an EpsilonGreedy agent?
-    bandits.append(UCB(env=env, epsilon=0.1, sample_averages=True))
+    bandits.append(UCB(epsilon=0, UCB_param=2, sample_averages=True))
+    bandits.append(EpsilonGreedy(epsilon=0.1, sample_averages=True))
     _, average_rewards = simulate(runs, time, bandits)
 
     plt.plot(average_rewards[0], label="UCB $c = 2$")
