@@ -233,8 +233,8 @@ def figure_epsilongreedy(runs=2000, time=1000, show=False):
 def figure_UCB(runs=2000, time=1000, show=False):
     env = GaussianBanditEnvironment(num_actions=10)
     bandits = []
-    bandits.append(UCB(epsilon=0, UCB_param=2, sample_averages=True))
-    bandits.append(EpsilonGreedy(epsilon=0.1, sample_averages=True))
+    bandits.append(UCB(env=env, epsilon=0, UCB_param=2, sample_averages=True))
+    bandits.append(EpsilonGreedy(env=env, epsilon=0.1, sample_averages=True))
     _, average_rewards = simulate(runs, time, bandits)
 
     plt.plot(average_rewards[0], label="UCB $c = 2$")
