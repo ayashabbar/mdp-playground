@@ -22,7 +22,6 @@ class Base_Bandit(ABC):
         initial=0.0,
         step_size=0.1,
         sample_averages=False,
-        UCB_param=None,
         true_reward=0.0,
     ):
         self.k = k_arm
@@ -30,7 +29,6 @@ class Base_Bandit(ABC):
         self.sample_averages = sample_averages
         self.indices = np.arange(self.k)
         self.time = 0
-        self.UCB_param = UCB_param
         self.average_reward = 0
         self.true_reward = true_reward
         self.epsilon = epsilon
@@ -52,7 +50,7 @@ class Base_Bandit(ABC):
 
     # get an action for this bandit
     @abstractmethod
-    def act(self):
+    def act(self) -> int:
         pass
 
     # take an action, update estimation for this action
@@ -86,7 +84,11 @@ class EpsilonGreedy(Base_Bandit):
 
 
 class UCB(Base_Bandit):
-    def act(self):
+    def __init__(self, UCB_param=None, **kwargs):
+        super().__init__(**kwargs)
+        self.UCB_param = UCB_param
+
+    def act(self) -> int:
         if self.UCB_param is not None:
             UCB_estimation = self.q_estimation + self.UCB_param * np.sqrt(
                 np.log(self.time + 1) / (self.action_count + 1e-5)
@@ -98,45 +100,40 @@ class UCB(Base_Bandit):
 
 
 class ThompsonSampling(Base_Bandit):
-    def __init__(self, alphas=None, betas=None, successes=None, failures=None):
-        self.k_arm = 0
-        # default to uniform priors (1, 1) if not provided
-        self.default_alpha = 1
-        self.default_beta = 1
-
-        # will be initialized in initialize() or reset()
-        self.alphas = alphas
-        self.betas = betas
-        self.successes = successes
-        self.failures = failures
-        self.best_action = None
-        self.true_probs = None
-
-    def initialize(self, k_arm, true_probs=None):
-        self.k_arm = k_arm
+    def __init__(self, true_probs=None, default_alpha=1, default_beta=1, **kwargs):
+        # Thompson Sampling specific parameters
+        self.default_alpha = default_alpha
+        self.default_beta = default_beta
         self.true_probs = true_probs
-        if true_probs:
-            self.best_action = int(np.argmax(true_probs))
 
-        # reset to uniform priors
-        self.alphas = [self.default_alpha] * k_arm
-        self.betas = [self.default_beta] * k_arm
-        self.successes = [0] * k_arm
-        self.failures = [0] * k_arm
+        # Call the superclass constructor with all remaining parameters
+        super().__init__(**kwargs)
+
+        # Initialize Thompson Sampling specific attributes using k from superclass
+        if self.k > 0:
+            self.alphas = [self.default_alpha] * self.k
+            self.betas = [self.default_beta] * self.k
+            self.successes = [0] * self.k
+            self.failures = [0] * self.k
+
+            if self.true_probs:
+                self.best_action = int(np.argmax(self.true_probs))
+            else:
+                self.best_action = None
 
     def reset(self):
         # resets the internal state for a new run
-        if self.k_arm > 0:
-            self.alphas = [self.default_alpha] * self.k_arm
-            self.betas = [self.default_beta] * self.k_arm
-            self.successes = [0] * self.k_arm
-            self.failures = [0] * self.k_arm
+        if self.k > 0:
+            self.alphas = [self.default_alpha] * self.k
+            self.betas = [self.default_beta] * self.k
+            self.successes = [0] * self.k
+            self.failures = [0] * self.k
 
     def act(self) -> int:
         samples = [np.random.beta(a, b) for a, b in zip(self.alphas, self.betas)]
         return int(np.argmax(samples))
 
-    def step(self, action: int) -> float:
+    def step(self, action: int):
         """
         Simulates the environment: generates a reward based on true probabilities,
         updates the internal counts, and returns the reward.
@@ -258,8 +255,7 @@ def figure_TS(runs=2000, time=1000, show=False):
     true_probs = [0.2, 0.7, 0.5]
     k_arms = len(true_probs)
 
-    ts = ThompsonSampling()
-    ts.initialize(k_arm=k_arms, true_probs=true_probs)
+    ts = ThompsonSampling(k_arm=k_arms, true_probs=true_probs)
     bandits_list = [ts]
 
     rewards, optimality = simulate(runs, time, bandits=bandits_list)
@@ -288,8 +284,7 @@ def figure_TS(runs=2000, time=1000, show=False):
     plt.close()
 
     # visualize final posteriors
-    ts_viz = ThompsonSampling()
-    ts_viz.initialize(k_arm=k_arms, true_probs=true_probs)
+    ts_viz = ThompsonSampling(k_arm=k_arms, true_probs=true_probs)
 
     for _ in range(200):
         action = ts_viz.act()
