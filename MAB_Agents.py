@@ -18,7 +18,6 @@ class Base_Bandit(ABC):
     # @initial: initial estimation for each action
     # @step_size: constant step size for updating estimations
     # @sample_averages: if True, use sample averages to update estimations instead of constant step size
-    # @UCB_param: if not None, use UCB algorithm to select action
 
     def __init__(
         self,
@@ -76,7 +75,6 @@ class Base_Bandit(ABC):
             )
 
         return reward
-
 
 class EpsilonGreedy(Base_Bandit):
     def act(self):
@@ -179,6 +177,36 @@ class ThompsonSampling(Base_Bandit):
         plt.title("Posterior Beta Distributions for Each Arm")
         plt.legend()
         # plt.show()
+
+
+class GittinsIndex(Base_Bandit):
+    def __init__(self, discount_factor=0.99, **kwargs
+    ):
+        self.discount_factor = discount_factor
+        super().__init__(**kwargs)
+
+        # Initialize flat Beta(1,1) priors for each arm
+        self.successes = np.ones(self.k)
+        self.failures = np.ones(self.k)
+
+    def act(self) -> int:
+        """Finds and returns the index of the best arm to pull."""
+        indices = []
+        for i in range(self.k):
+            idx = gittins_index_approx(
+                self.successes[i], 
+                self.failures[i], 
+                self.discount_factor
+            )
+            indices.append(idx)
+        return int(np.argmax(indices))
+
+    def update(self, arm_index, reward):
+        """Updates the posterior state based on binary outcomes."""
+        if reward == 1:
+            self.successes[arm_index] += 1
+        else:
+             self.failures[arm_index] += 1    
 
 
 def simulate(runs, time, bandits):
@@ -293,7 +321,95 @@ def figure_TS(runs=2000, time=1000, show=False):
     plt.close()
 
 
+def gittins_index_approx(successes: int, failures: int, discount_factor: float = 0.9) -> float:
+    """
+    This function implements a Bayesian Upper Confidence Bound (Bayes-UCB) strategy 
+    that serves as a computationally efficient proxy for the true Gittins index
+    Daniel Russo (2021)
+
+    Parameters:
+        successes (int): Number of observed successes (s).
+        failures (int): Number of observed failures (f).
+        discount_factor (float): Gamma, typically close to 1 (e.g., 0.9 - 0.99).
+        
+    Returns:
+        float: Approximated Gittins index.
+    """
+    # Alpha and Beta for the posterior Beta distribution
+    # Prior is typically Beta(1, 1) for uniform, so alpha = s + 1, beta_param = f + 1
+    alpha = successes + 1
+    beta_param = failures + 1
+    
+    n = alpha + beta_param - 2 # Total observations
+    
+    # Posterior Mean (Exploitation term)
+    mean = alpha / (alpha + beta_param)
+    
+    # If no data, return the prior mean (0.5 for Beta(1,1))
+    if n == 0:
+        return 0.5
+
+    # Posterior Variance (Exploration term) / Uncertainty
+    variance = (alpha * beta_param) / ((alpha + beta_param)**2 * (alpha + beta_param + 1))
+    std_dev = np.sqrt(variance)
+    
+    # Effective horizon approximation
+    if discount_factor >= 1.0:
+        return 1.0 
+        
+    effective_horizon = 1 / (1 - discount_factor)
+    
+    # The exploration bonus (the approximation core)
+    scaling_factor = np.sqrt(2 * np.log(effective_horizon + 1)) 
+    
+    exploration_bonus = scaling_factor * std_dev
+    
+    index_value = mean + exploration_bonus
+    
+    return float(min(max(index_value, 0.0), 1.0))
+
+
+def figure_GI():
+    # Setup simulation parameters
+    fixed_failures = 5
+    success_range = np.arange(1, 21)  # X-axis from 1 to 20 successes
+    discount = 0.95
+
+    # Compute indices over the distribution grid
+    gittins_values = [gittins_index_approx(s, fixed_failures, discount) for s in success_range]
+    posterior_means = [s / (s + fixed_failures) for s in success_range]
+
+    # Initialize the visualization layout
+    plt.figure(figsize=(10, 6), facecolor='#f8f9fa')
+    ax = plt.axes()
+    ax.set_facecolor('#ffffff')
+
+    # Plot the curves
+    plt.plot(success_range, gittins_values, color='#1a73e8', marker='o', 
+            linestyle='-', linewidth=2.5, label='Gittins Index (Discount=0.95)')
+    plt.plot(success_range, posterior_means, color='#d93025', marker='x', 
+            linestyle='--', linewidth=2.0, label='Posterior Mean (Exploitation Only)')
+
+    # Fill the gap to explicitly highlight the exploration bonus gap
+    plt.fill_between(success_range, posterior_means, gittins_values, 
+                    color='#1a73e8', alpha=0.1, label='Exploration Bonus')
+
+    plt.title('Gittins Index Optimization Surface Map', fontsize=14, fontweight='bold', pad=15)
+    plt.xlabel('Number of Observed Successes (\\$alpha - 1$)', fontsize=12, labelpad=10)
+    plt.ylabel('Policy Value / Allocation Score', fontsize=12, labelpad=10)
+    plt.xticks(success_range)
+    plt.ylim(0.0, 1.05)
+
+    #plt.grid(True, linestyle=':', alpha=0.6, color='#9aa0a6')
+    plt.legend(fontsize=11, loc='lower right', frameon=True, facecolor='#ffffff', edgecolor='#dadce0')
+
+    plt.tight_layout()
+    plt.savefig("figure_GI.png")
+    plt.close()
+
+
 if __name__ == "__main__":
-    figure_epsilongreedy()
-    figure_UCB()
-    figure_TS()
+    #figure_epsilongreedy()
+    #figure_UCB()
+    #figure_TS()
+    figure_GI()
