@@ -387,24 +387,24 @@ def figure_GI():
     # Plot the curves
     plt.plot(success_range, gittins_values, color='#1a73e8', marker='o', 
             linestyle='-', linewidth=2.5, label='Gittins Index (Discount=0.95)')
-    plt.plot(success_range, posterior_means, color='#d93025', marker='x', 
+    plt.plot(success_range, posterior_means, color="#ff6017", marker='x', 
             linestyle='--', linewidth=2.0, label='Posterior Mean (Exploitation Only)')
 
     # Fill the gap to explicitly highlight the exploration bonus gap
     plt.fill_between(success_range, posterior_means, gittins_values, 
                     color='#1a73e8', alpha=0.1, label='Exploration Bonus')
 
-    plt.title('Gittins Index Optimization Surface Map', fontsize=14, fontweight='bold', pad=15)
+    plt.title('Approximation Gittins Indices', fontsize=14, fontweight='bold', pad=15)
     plt.xlabel('Number of Observed Successes (\\$alpha - 1$)', fontsize=12, labelpad=10)
     plt.ylabel('Policy Value / Allocation Score', fontsize=12, labelpad=10)
     plt.xticks(success_range)
     plt.ylim(0.0, 1.05)
 
-    #plt.grid(True, linestyle=':', alpha=0.6, color='#9aa0a6')
     plt.legend(fontsize=11, loc='lower right', frameon=True, facecolor='#ffffff', edgecolor='#dadce0')
 
     plt.tight_layout()
-    plt.savefig("figure_GI.png")
+    #plt.show()
+    plt.savefig("figure_GI_0.png")
     plt.close()
 
 

@@ -172,10 +172,10 @@ The simplest action selection rule is to select one of the actions with the high
 <p><br>
 Greedy action selection always exploits current knowledge to maximize immediate reward; it spends no time at all sampling apparently inferior actions to see if they might really be better. A simple alternative is to behave greedily most of the time, but every once in a while, say with small probability <span class="math inline">\(\epsilon\)</span>, instead select randomly from among all the actions with equal probability, independently of the action-value estimates. We call methods using this near-greedy action selection rule <span class="math inline">\(\epsilon\)</span>-greedy methods.</p>
 <p>We structure our code with a main ABC class (Base Bandit). Every algorithm represents a subclass that inherits from the main class. The environemnt structure represents the environment associated with each algorithm.</p>
-<div id="279244a3-6e16-4ca9-b2aa-10928a3a747e" class="cell" data-execution_count="1">
+<div id="279244a3-6e16-4ca9-b2aa-10928a3a747e" class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> MAB_EpsilonGreedy_UCB <span class="im">import</span> <span class="op">*</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> MAB_Agents <span class="im">import</span> <span class="op">*</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 <div id="fc50a6d8" class="cell">
