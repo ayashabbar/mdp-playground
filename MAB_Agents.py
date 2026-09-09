@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import beta
 from tqdm import trange
+from scipy.stats import norm
 
 from environment import (
     BanditEnvironment,
@@ -119,6 +120,7 @@ class ThompsonSampling(Base_Bandit):
         self.failures = [0] * self.k
 
     def reset(self):
+        super().reset()
         self.alphas = [self.default_alpha] * self.k
         self.betas = [self.default_beta] * self.k
         self.successes = [0] * self.k
@@ -135,6 +137,7 @@ class ThompsonSampling(Base_Bandit):
         """
         reward = self.env.get_reward(action)
         self.time += 1
+        self.action_count[action] += 1
         self.average_reward += (reward - self.average_reward) / self.time
 
         # update internal statistics
@@ -146,9 +149,6 @@ class ThompsonSampling(Base_Bandit):
             self.betas[action] += 1
 
         return reward
-
-    def update(self, arm, reward):
-        pass
 
     def plot_posteriors(self, arm_labels=None):
         # plots the Probability Density Function (PDF) of the Beta distribution for each arm."""
@@ -186,8 +186,8 @@ class GittinsIndex(Base_Bandit):
         super().__init__(**kwargs)
 
         # Initialize flat Beta(1,1) priors for each arm
-        self.successes = np.ones(self.k)
-        self.failures = np.ones(self.k)
+        self.successes = np.zeros(self.k)
+        self.failures = np.zeros(self.k)
 
     def act(self) -> int:
         """Finds and returns the index of the best arm to pull."""
@@ -201,13 +201,25 @@ class GittinsIndex(Base_Bandit):
             indices.append(idx)
         return int(np.argmax(indices))
 
-    def update(self, arm_index, reward):
-        """Updates the posterior state based on binary outcomes."""
-        if reward == 1:
-            self.successes[arm_index] += 1
-        else:
-             self.failures[arm_index] += 1    
+    def step(self, action):
+        reward = self.env.get_reward(action)
+        self.time += 1
+        self.action_count[action] += 1
+        self.average_reward += (reward - self.average_reward) / self.time
 
+        if reward == 1:
+            self.successes[action] += 1
+        else:
+            self.failures[action] += 1
+
+        return reward      
+    
+    def reset(self):
+        super().reset()
+        self.successes = np.zeros(self.k)
+        self.failures = np.zeros(self.k)  
+
+         
 
 def simulate(runs, time, bandits):
     rewards = np.zeros((len(bandits), runs, time))
@@ -282,40 +294,55 @@ def figure_TS(runs=2000, time=1000, show=False):
     env = BernoulliBanditEnvironment(true_probs=true_probs)
 
     ts = ThompsonSampling(env=env)
-    bandits_list = [ts]
+    ucb = UCB(env=env, UCB_param=2, sample_averages=True)
+    bandits_list = [ts, ucb]
 
-    rewards, optimality = simulate(runs, time, bandits=bandits_list)
-    avg_rewards = rewards[0]
-    avg_optimality = optimality[0]
+    optimality, rewards = simulate(runs, time, bandits=bandits_list)
+
+    plt.plot(rewards[0], label="Thompson Sampling")
+    plt.plot(rewards[1], label="UCB $c = 2$")
+    plt.xlabel("Steps")
+    plt.ylabel("Average Reward")
+    plt.legend()
+
+    if show:
+        plt.show()
+    else:
+        plt.savefig("figure_TS_UCB.png")
+    plt.close()   
 
     plt.figure(figsize=(12, 5))
-
     plt.subplot(1, 2, 1)
-    plt.plot(avg_rewards)
+    plt.plot(rewards[0], label="Thompson Sampling")
+    plt.plot(rewards[1], label="UCB $c = 2$")
     plt.title("Average Reward per Step")
     plt.xlabel("Step")
     plt.ylabel("Reward")
+    plt.legend()
 
     plt.subplot(1, 2, 2)
-    plt.plot(avg_optimality * 100)
+    plt.plot(optimality[0] * 100, label="Thompson Sampling")
+    plt.plot(optimality[1] * 100, label="UCB $c = 2$")
     plt.title("Percentage of Optimal Actions")
     plt.xlabel("Step")
     plt.ylabel("% Optimal")
     plt.ylim(0, 100)
+    plt.legend()
     plt.tight_layout()
+
     if show:
         plt.show()
     else:
-        plt.savefig("figure_TS.png")
+        plt.savefig("figure_TS_TS.png")
     plt.close()
 
     # visualize final posteriors
     ts_viz = ThompsonSampling(env=env)
-
+    
     for _ in range(200):
         action = ts_viz.act()
         reward = ts_viz.step(action)
-
+    
     ts_viz.plot_posteriors(arm_labels=["Low (0.2)", "High (0.7)", "Med (0.5)"])
     plt.savefig("figure_TS_PDF.png")
     plt.close()
@@ -323,53 +350,28 @@ def figure_TS(runs=2000, time=1000, show=False):
 
 def gittins_index_approx(successes: int, failures: int, discount_factor: float = 0.9) -> float:
     """
-    This function implements a Bayesian Upper Confidence Bound (Bayes-UCB) strategy 
-    that serves as a computationally efficient proxy for the true Gittins index
-    Daniel Russo (2021)
+    Approximates the Gittins index for a Beta-Bernoulli arm using the
+    asymptotic equivalence to the posterior γ-quantile (Russo, 2014).
 
-    Parameters:
-        successes (int): Number of observed successes (s).
-        failures (int): Number of observed failures (f).
-        discount_factor (float): Gamma, typically close to 1 (e.g., 0.9 - 0.99).
-        
-    Returns:
-        float: Approximated Gittins index.
+    GI ≈ μ + Φ⁻¹(γ) · σ   (as γ → 1)
     """
-    # Alpha and Beta for the posterior Beta distribution
-    # Prior is typically Beta(1, 1) for uniform, so alpha = s + 1, beta_param = f + 1
     alpha = successes + 1
     beta_param = failures + 1
-    
-    n = alpha + beta_param - 2 # Total observations
-    
-    # Posterior Mean (Exploitation term)
-    mean = alpha / (alpha + beta_param)
-    
-    # If no data, return the prior mean (0.5 for Beta(1,1))
-    if n == 0:
-        return 0.5
 
-    # Posterior Variance (Exploration term) / Uncertainty
+    mean = alpha / (alpha + beta_param)
     variance = (alpha * beta_param) / ((alpha + beta_param)**2 * (alpha + beta_param + 1))
     std_dev = np.sqrt(variance)
-    
-    # Effective horizon approximation
+
     if discount_factor >= 1.0:
-        return 1.0 
-        
-    effective_horizon = 1 / (1 - discount_factor)
-    
-    # The exploration bonus (the approximation core)
-    scaling_factor = np.sqrt(2 * np.log(effective_horizon + 1)) 
-    
-    exploration_bonus = scaling_factor * std_dev
-    
-    index_value = mean + exploration_bonus
-    
-    return float(min(max(index_value, 0.0), 1.0))
+        return float(mean)  # undiscounted → pure exploitation
+
+    scaling = norm.ppf(discount_factor)  # Φ⁻¹(γ)
+    index_value = mean + scaling * std_dev
+
+    return float(np.clip(index_value, 0.0, 1.0))
 
 
-def figure_GI():
+def figure_Gittins():
     # Setup simulation parameters
     fixed_failures = 5
     success_range = np.arange(1, 21)  # X-axis from 1 to 20 successes
@@ -377,7 +379,7 @@ def figure_GI():
 
     # Compute indices over the distribution grid
     gittins_values = [gittins_index_approx(s, fixed_failures, discount) for s in success_range]
-    posterior_means = [s / (s + fixed_failures) for s in success_range]
+    posterior_means = [(s + 1) / (s + fixed_failures + 2) for s in success_range]   
 
     # Initialize the visualization layout
     plt.figure(figsize=(10, 6), facecolor='#f8f9fa')
@@ -394,8 +396,8 @@ def figure_GI():
     plt.fill_between(success_range, posterior_means, gittins_values, 
                     color='#1a73e8', alpha=0.1, label='Exploration Bonus')
 
-    plt.title('Approximation Gittins Indices', fontsize=14, fontweight='bold', pad=15)
-    plt.xlabel('Number of Observed Successes (\\$alpha - 1$)', fontsize=12, labelpad=10)
+    plt.title('Approximation of Gittins Indices', fontsize=14, fontweight='bold', pad=15)
+    plt.xlabel('Number of Observed Successes ($\\alpha - 1$)', fontsize=12, labelpad=10)
     plt.ylabel('Policy Value / Allocation Score', fontsize=12, labelpad=10)
     plt.xticks(success_range)
     plt.ylim(0.0, 1.05)
@@ -404,12 +406,53 @@ def figure_GI():
 
     plt.tight_layout()
     #plt.show()
-    plt.savefig("figure_GI_0.png")
+    plt.savefig("figure_Gittins.png")
     plt.close()
 
+
+def figure_GI(runs=2000, time=1000, show=False):
+    true_probs = [0.2, 0.7, 0.5]
+    env = BernoulliBanditEnvironment(true_probs=true_probs)
+
+    gi = GittinsIndex(env=env, discount_factor=0.95)
+    ucb = UCB(env=env, UCB_param=2, sample_averages=True)
+    ts = ThompsonSampling(env=env)
+    bandits_list = [gi, ucb, ts]
+
+    optimality, rewards = simulate(runs, time, bandits=bandits_list)
+
+    plt.figure(figsize=(12, 5))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(rewards[0], label="Gittins Index (γ=0.95)")
+    plt.plot(rewards[1], label="UCB $c = 2$")
+    plt.plot(rewards[2], label="Thompson Sampling")
+    plt.title("Average Reward per Step")
+    plt.xlabel("Step")
+    plt.ylabel("Reward")
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(optimality[0] * 100, label="Gittins Index (γ=0.95)")
+    plt.plot(optimality[1] * 100, label="UCB $c = 2$")
+    plt.plot(optimality[2] * 100, label="Thompson Sampling")
+    plt.title("Percentage of Optimal Actions")
+    plt.xlabel("Step")
+    plt.ylabel("% Optimal")
+    plt.ylim(0, 100)
+    plt.legend()
+
+    plt.tight_layout()
+    if show:
+        plt.show()
+    else:
+        plt.savefig("figure_GI.png")
+    plt.close()   
+    
 
 if __name__ == "__main__":
     #figure_epsilongreedy()
     #figure_UCB()
     #figure_TS()
-    figure_GI()
+    figure_Gittins()
+    #figure_GI()
