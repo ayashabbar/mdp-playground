@@ -297,20 +297,9 @@ def figure_TS(runs=2000, time=1000, show=False):
     ucb = UCB(env=env, UCB_param=2, sample_averages=True)
     bandits_list = [ts, ucb]
 
-    optimality, rewards = simulate(runs, time, bandits=bandits_list)
+    optimality, rewards = simulate(runs, time, bandits=bandits_list)  
 
-    plt.plot(rewards[0], label="Thompson Sampling")
-    plt.plot(rewards[1], label="UCB $c = 2$")
-    plt.xlabel("Steps")
-    plt.ylabel("Average Reward")
-    plt.legend()
-
-    if show:
-        plt.show()
-    else:
-        plt.savefig("figure_TS_UCB.png")
-    plt.close()   
-
+   
     plt.figure(figsize=(12, 5))
     plt.subplot(1, 2, 1)
     plt.plot(rewards[0], label="Thompson Sampling")
@@ -344,7 +333,11 @@ def figure_TS(runs=2000, time=1000, show=False):
         reward = ts_viz.step(action)
     
     ts_viz.plot_posteriors(arm_labels=["Low (0.2)", "High (0.7)", "Med (0.5)"])
-    plt.savefig("figure_TS_PDF.png")
+
+    if show:
+        plt.show()
+    else:
+        plt.savefig("figure_TS_PDF.png")
     plt.close()
 
 
@@ -453,6 +446,6 @@ def figure_GI(runs=2000, time=1000, show=False):
 if __name__ == "__main__":
     #figure_epsilongreedy()
     #figure_UCB()
-    #figure_TS()
-    figure_Gittins()
+    figure_TS()
+    #figure_Gittins()
     #figure_GI()
