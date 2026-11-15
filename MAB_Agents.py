@@ -364,7 +364,7 @@ def gittins_index_approx(successes: int, failures: int, discount_factor: float =
     return float(np.clip(index_value, 0.0, 1.0))
 
 
-def figure_Gittins():
+def figure_Gittins(show=False):
     # Setup simulation parameters
     fixed_failures = 5
     success_range = np.arange(1, 21)  # X-axis from 1 to 20 successes
@@ -375,8 +375,9 @@ def figure_Gittins():
     posterior_means = [(s + 1) / (s + fixed_failures + 2) for s in success_range]   
 
     # Initialize the visualization layout
-    plt.figure(figsize=(10, 6), facecolor='#f8f9fa')
-    ax = plt.axes()
+    #plt.figure(figsize=(10, 6), facecolor='#f8f9fa')
+    #ax = plt.axes()
+    fig, ax = plt.subplots(figsize=(10, 6), facecolor='#f8f9fa')
     ax.set_facecolor('#ffffff')
 
     # Plot the curves
@@ -399,8 +400,12 @@ def figure_Gittins():
 
     plt.tight_layout()
     #plt.show()
-    plt.savefig("figure_Gittins.png")
-    plt.close()
+    if show:
+        plt.close(fig)  # Prevents Jupyter from plotting it twice
+        return fig
+    else:
+        fig.savefig("figure_Gittins.png")
+        plt.close(fig)
 
 
 def figure_GI(runs=2000, time=1000, show=False):

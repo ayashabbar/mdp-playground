@@ -97,9 +97,15 @@ def solve_node(h, V, Q, pi, pi_theta, mdp):
             BeliefState(s=s, belief_theta=belief_theta, t=t+1)
             for s, belief_theta in zip(next_s, next_belief_theta)
         ]
+        next_V = np.array([V[next_h] for next_h in belief_states])
+        
+        # death penalty
+        #for i, s_next in enumerate(next_s):
+        #    if s_next == -1:
+        #        next_V[i] += r_death  # or: next_V[i] = r_death (if V[-1] is 0)
 
         # Bellman backup
-        next_V = np.array([V[next_h] for next_h in belief_states])
+        #next_V = np.array([V[next_h] for next_h in belief_states])
         Q_h_a = np.sum(prob_next_s * (r + gamma * next_V))
         Q_h.append(Q_h_a)
 
@@ -133,17 +139,18 @@ def backward_pass(list_of_h_sets, mdp):
 def np_to_tuple(x):
     return tuple(x.tolist())
 
-def rewards_mouse(s, a, theta):
-    import Environment
-    if s == 0: return Environment.R_SAFE
-    if s == 1: return Environment.R_DANGEROUS
-    if s == 2: return 0.0   # no reward while escaping
+def rewards_mouse(s, a, theta, r_safe=1.0, r_dangerous=3.0):
+    if s == 0:
+        return r_safe
+    if s == 1:
+        return r_dangerous
+    if s == 2:
+        return 0.0   # no reward while escaping
 
 def rewards_last(state, r_death=-100.0):
-    import Environment
     if state == -1:
-        return Environment.R_DEATH
-    return 0.0     
+        return r_death
+    return 0.0   
 
 def transitions_mouse(h, a, theta_grid, p_escape):
     s = h.s
@@ -193,6 +200,3 @@ def beta_prior_on_grid(theta_grid, a, b):
     p = pdf_vals * dw
     p /= p.sum()
     return p
-
-
-
