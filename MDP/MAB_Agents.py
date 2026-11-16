@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -6,7 +7,7 @@ from scipy.stats import beta
 from tqdm import trange
 from scipy.stats import norm
 
-from environment import (
+from .environment import (
     BanditEnvironment,
     BernoulliBanditEnvironment,
     GaussianBanditEnvironment,
@@ -76,6 +77,7 @@ class Base_Bandit(ABC):
             )
 
         return reward
+
 
 class EpsilonGreedy(Base_Bandit):
     def act(self):
@@ -180,8 +182,7 @@ class ThompsonSampling(Base_Bandit):
 
 
 class GittinsIndex(Base_Bandit):
-    def __init__(self, discount_factor=0.99, **kwargs
-    ):
+    def __init__(self, discount_factor=0.99, **kwargs):
         self.discount_factor = discount_factor
         super().__init__(**kwargs)
 
@@ -194,9 +195,7 @@ class GittinsIndex(Base_Bandit):
         indices = []
         for i in range(self.k):
             idx = gittins_index_approx(
-                self.successes[i], 
-                self.failures[i], 
-                self.discount_factor
+                self.successes[i], self.failures[i], self.discount_factor
             )
             indices.append(idx)
         return int(np.argmax(indices))
@@ -212,14 +211,13 @@ class GittinsIndex(Base_Bandit):
         else:
             self.failures[action] += 1
 
-        return reward      
-    
+        return reward
+
     def reset(self):
         super().reset()
         self.successes = np.zeros(self.k)
-        self.failures = np.zeros(self.k)  
+        self.failures = np.zeros(self.k)
 
-         
 
 def simulate(runs, time, bandits):
     rewards = np.zeros((len(bandits), runs, time))
@@ -240,7 +238,9 @@ def simulate(runs, time, bandits):
     return mean_best_action_counts, mean_rewards
 
 
-def figure_epsilongreedy(runs=2000, time=1000, show=False):
+def figure_epsilongreedy(runs=2000, time=1000, show=False, out_dir="outputs"):
+    if not show:
+        os.makedirs(out_dir, exist_ok=True)
     env = GaussianBanditEnvironment(num_actions=10)
     epsilons = [0, 0.1, 0.01]
     bandits = [
@@ -270,7 +270,9 @@ def figure_epsilongreedy(runs=2000, time=1000, show=False):
     plt.close()
 
 
-def figure_UCB(runs=2000, time=1000, show=False):
+def figure_UCB(runs=2000, time=1000, show=False, out_dir="outputs"):
+    if not show:
+        os.makedirs(out_dir, exist_ok=True)
     env = GaussianBanditEnvironment(num_actions=10)
     bandits = []
     bandits.append(UCB(env=env, epsilon=0, UCB_param=2, sample_averages=True))
@@ -289,7 +291,9 @@ def figure_UCB(runs=2000, time=1000, show=False):
     plt.close()
 
 
-def figure_TS(runs=2000, time=1000, show=False):
+def figure_TS(runs=2000, time=1000, show=False, out_dir="outputs"):
+    if not show:
+        os.makedirs(out_dir, exist_ok=True)
     true_probs = [0.2, 0.7, 0.5]
     env = BernoulliBanditEnvironment(true_probs=true_probs)
 
@@ -297,9 +301,8 @@ def figure_TS(runs=2000, time=1000, show=False):
     ucb = UCB(env=env, UCB_param=2, sample_averages=True)
     bandits_list = [ts, ucb]
 
-    optimality, rewards = simulate(runs, time, bandits=bandits_list)  
+    optimality, rewards = simulate(runs, time, bandits=bandits_list)
 
-   
     plt.figure(figsize=(12, 5))
     plt.subplot(1, 2, 1)
     plt.plot(rewards[0], label="Thompson Sampling")
@@ -327,11 +330,11 @@ def figure_TS(runs=2000, time=1000, show=False):
 
     # visualize final posteriors
     ts_viz = ThompsonSampling(env=env)
-    
+
     for _ in range(200):
         action = ts_viz.act()
         reward = ts_viz.step(action)
-    
+
     ts_viz.plot_posteriors(arm_labels=["Low (0.2)", "High (0.7)", "Med (0.5)"])
 
     if show:
@@ -341,7 +344,9 @@ def figure_TS(runs=2000, time=1000, show=False):
     plt.close()
 
 
-def gittins_index_approx(successes: int, failures: int, discount_factor: float = 0.9) -> float:
+def gittins_index_approx(
+    successes: int, failures: int, discount_factor: float = 0.9
+) -> float:
     """
     Approximates the Gittins index for a Beta-Bernoulli arm using the
     asymptotic equivalence to the posterior γ-quantile (Russo, 2014).
@@ -352,7 +357,9 @@ def gittins_index_approx(successes: int, failures: int, discount_factor: float =
     beta_param = failures + 1
 
     mean = alpha / (alpha + beta_param)
-    variance = (alpha * beta_param) / ((alpha + beta_param)**2 * (alpha + beta_param + 1))
+    variance = (alpha * beta_param) / (
+        (alpha + beta_param) ** 2 * (alpha + beta_param + 1)
+    )
     std_dev = np.sqrt(variance)
 
     if discount_factor >= 1.0:
@@ -364,42 +371,74 @@ def gittins_index_approx(successes: int, failures: int, discount_factor: float =
     return float(np.clip(index_value, 0.0, 1.0))
 
 
-def figure_Gittins(show=False):
+def figure_Gittins(show=False, out_dir="outputs"):
+    if not show:
+        os.makedirs(out_dir, exist_ok=True)
     # Setup simulation parameters
     fixed_failures = 5
     success_range = np.arange(1, 21)  # X-axis from 1 to 20 successes
     discount = 0.95
 
     # Compute indices over the distribution grid
-    gittins_values = [gittins_index_approx(s, fixed_failures, discount) for s in success_range]
-    posterior_means = [(s + 1) / (s + fixed_failures + 2) for s in success_range]   
+    gittins_values = [
+        gittins_index_approx(s, fixed_failures, discount) for s in success_range
+    ]
+    posterior_means = [(s + 1) / (s + fixed_failures + 2) for s in success_range]
 
     # Initialize the visualization layout
-    #plt.figure(figsize=(10, 6), facecolor='#f8f9fa')
-    #ax = plt.axes()
-    fig, ax = plt.subplots(figsize=(10, 6), facecolor='#f8f9fa')
-    ax.set_facecolor('#ffffff')
+    # plt.figure(figsize=(10, 6), facecolor='#f8f9fa')
+    # ax = plt.axes()
+    fig, ax = plt.subplots(figsize=(10, 6), facecolor="#f8f9fa")
+    ax.set_facecolor("#ffffff")
 
     # Plot the curves
-    plt.plot(success_range, gittins_values, color='#1a73e8', marker='o', 
-            linestyle='-', linewidth=2.5, label='Gittins Index (Discount=0.95)')
-    plt.plot(success_range, posterior_means, color="#ff6017", marker='x', 
-            linestyle='--', linewidth=2.0, label='Posterior Mean (Exploitation Only)')
+    plt.plot(
+        success_range,
+        gittins_values,
+        color="#1a73e8",
+        marker="o",
+        linestyle="-",
+        linewidth=2.5,
+        label="Gittins Index (Discount=0.95)",
+    )
+    plt.plot(
+        success_range,
+        posterior_means,
+        color="#ff6017",
+        marker="x",
+        linestyle="--",
+        linewidth=2.0,
+        label="Posterior Mean (Exploitation Only)",
+    )
 
     # Fill the gap to explicitly highlight the exploration bonus gap
-    plt.fill_between(success_range, posterior_means, gittins_values, 
-                    color='#1a73e8', alpha=0.1, label='Exploration Bonus')
+    plt.fill_between(
+        success_range,
+        posterior_means,
+        gittins_values,
+        color="#1a73e8",
+        alpha=0.1,
+        label="Exploration Bonus",
+    )
 
-    plt.title('Approximation of Gittins Indices', fontsize=14, fontweight='bold', pad=15)
-    plt.xlabel('Number of Observed Successes ($\\alpha - 1$)', fontsize=12, labelpad=10)
-    plt.ylabel('Policy Value / Allocation Score', fontsize=12, labelpad=10)
+    plt.title(
+        "Approximation of Gittins Indices", fontsize=14, fontweight="bold", pad=15
+    )
+    plt.xlabel("Number of Observed Successes ($\\alpha - 1$)", fontsize=12, labelpad=10)
+    plt.ylabel("Policy Value / Allocation Score", fontsize=12, labelpad=10)
     plt.xticks(success_range)
     plt.ylim(0.0, 1.05)
 
-    plt.legend(fontsize=11, loc='lower right', frameon=True, facecolor='#ffffff', edgecolor='#dadce0')
+    plt.legend(
+        fontsize=11,
+        loc="lower right",
+        frameon=True,
+        facecolor="#ffffff",
+        edgecolor="#dadce0",
+    )
 
     plt.tight_layout()
-    #plt.show()
+    # plt.show()
     if show:
         plt.close(fig)  # Prevents Jupyter from plotting it twice
         return fig
@@ -408,7 +447,9 @@ def figure_Gittins(show=False):
         plt.close(fig)
 
 
-def figure_GI(runs=2000, time=1000, show=False):
+def figure_GI(runs=2000, time=1000, show=False, out_dir="outputs"):
+    if not show:
+        os.makedirs(out_dir, exist_ok=True)
     true_probs = [0.2, 0.7, 0.5]
     env = BernoulliBanditEnvironment(true_probs=true_probs)
 
@@ -445,12 +486,12 @@ def figure_GI(runs=2000, time=1000, show=False):
         plt.show()
     else:
         plt.savefig("figure_GI.png")
-    plt.close()   
-    
+    plt.close()
+
 
 if __name__ == "__main__":
-    #figure_epsilongreedy()
-    #figure_UCB()
+    # figure_epsilongreedy()
+    # figure_UCB()
     figure_TS()
-    #figure_Gittins()
-    #figure_GI()
+    # figure_Gittins()
+    # figure_GI()
